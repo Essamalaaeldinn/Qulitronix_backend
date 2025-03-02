@@ -4,9 +4,32 @@ import { detectDefects } from "./services/detection.service.js";
 import DetectionResult from "../../DB/models/detectionResult.model.js";
 import { authenticationMiddleware } from "../../Middleware/authentication.middleware.js";
 import { errorHandler } from "../../Middleware/error-handler.middleware.js";
+import cloudinary from "cloudinary";
+import { CloudinaryStorage } from "multer-storage-cloudinary";
+import dotenv from "dotenv";
+
+dotenv.config();
 
 const detectionController = Router();
-const upload = multer({ dest: "uploads/" });
+
+// 🔹 Configure Cloudinary
+cloudinary.v2.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+// 🔹 Setup Multer with Cloudinary Storage
+const storage = new CloudinaryStorage({
+  cloudinary: cloudinary.v2,
+  params: {
+    folder: "pcb-defects", // Cloudinary folder where images will be stored
+    format: async (req, file) => "png", // Convert all images to PNG
+    public_id: (req, file) => file.originalname.split(".")[0], // Keep original file name
+  },
+});
+
+const upload = multer({ storage });
 
 // Apply authentication only to secured routes
 detectionController.use(errorHandler(authenticationMiddleware()));
@@ -21,8 +44,11 @@ detectionController.post(
         return res.status(400).json({ message: "No images uploaded" });
       }
 
-      const imagePaths = req.files.map((file) => file.path);
-      const detectionResults = await detectDefects(imagePaths);
+      // 🔹 Get Cloudinary URLs
+      const imageUrls = req.files.map((file) => file.path);
+
+      // 🔹 Pass Cloudinary URLs to the detection model
+      const detectionResults = await detectDefects(imageUrls);
 
       const savedResults = await Promise.all(
         detectionResults.batch_results.map(async (result) => {
@@ -42,7 +68,7 @@ detectionController.post(
   })
 );
 
-// 🟢 FIXED: GET Detection Results (Now Correctly Placed)
+// 🟢 GET Detection Results
 detectionController.get(
   "/results",
   errorHandler(async (req, res) => {
@@ -55,6 +81,7 @@ detectionController.get(
   })
 );
 
+// 🟢 GET Summary of Defect Analysis
 detectionController.get(
   "/summary",
   errorHandler(async (req, res) => {
@@ -101,6 +128,5 @@ detectionController.get(
     }
   })
 );
-
 
 export default detectionController;

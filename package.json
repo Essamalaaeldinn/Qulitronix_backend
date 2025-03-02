@@ -8,11 +8,9 @@
     "start": "node .",
     "start-watch": "nodemon ."
   },
-  
-    "engines": {
-      "node": "20.16.0"
-    },
-  
+  "engines": {
+    "node": "20.16.0"
+  },
   "keywords": [],
   "author": "",
   "license": "ISC",
@@ -20,6 +18,7 @@
   "dependencies": {
     "axios": "^1.8.1",
     "bcrypt": "^5.1.1",
+    "cloudinary": "^1.41.3",
     "crypto-js": "^4.2.0",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
@@ -29,6 +28,7 @@
     "mongodb": "^6.13.1",
     "mongoose": "^8.11.0",
     "multer": "^1.4.5-lts.1",
+    "multer-storage-cloudinary": "^4.0.0",
     "nodemailer": "^6.9.16",
     "stripe": "^17.6.0",
     "uuid": "^11.0.5"
