@@ -38,7 +38,8 @@ export const detectDefects = async (imageUrls) => {
     const formData = new FormData();
     tempPaths.forEach((path, index) => {
       console.log(`🔹 Attaching file: ${path}`); // Debugging
-      formData.append("images", fs.createReadStream(path));
+      formData.append("images[]", fs.createReadStream(path)); // Ensure API expects an array
+
     });
 
     console.log("🔹 FormData Headers:", formData.getHeaders());
