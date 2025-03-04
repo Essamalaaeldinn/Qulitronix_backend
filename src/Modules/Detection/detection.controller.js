@@ -40,16 +40,30 @@ detectionController.post(
   upload.array("images"),
   errorHandler(async (req, res) => {
     try {
+      console.log("Files received:", req.files); // ✅ Debugging step
+
       if (!req.files || req.files.length === 0) {
         return res.status(400).json({ message: "No images uploaded" });
       }
 
-      // 🔹 Get Cloudinary URLs
+      // 🔹 Ensure Cloudinary uploaded all images
       const imageUrls = req.files.map((file) => file.path);
+      console.log("Cloudinary URLs:", imageUrls); // ✅ Debugging step
+
+      if (!imageUrls || !Array.isArray(imageUrls) || imageUrls.length !== req.files.length) {
+        return res.status(500).json({ message: "Some files failed to upload to Cloudinary" });
+      }
 
       // 🔹 Pass Cloudinary URLs to the detection model
       const detectionResults = await detectDefects(imageUrls);
 
+      if (!detectionResults || !detectionResults.batch_results) {
+        return res.status(500).json({ message: "Detection API returned an invalid response" });
+      }
+
+      console.log("Detection API Response:", detectionResults); // ✅ Debugging step
+
+      // 🔹 Store detection results in MongoDB
       const savedResults = await Promise.all(
         detectionResults.batch_results.map(async (result) => {
           if (!result.error) {
@@ -63,11 +77,11 @@ detectionController.post(
         results: savedResults.filter(Boolean),
       });
     } catch (error) {
+      console.error("Error processing images:", error.message); // ✅ Debugging step
       return res.status(500).json({ message: "Error processing images", error: error.message });
     }
   })
 );
-
 // 🟢 GET Detection Results
 detectionController.get(
   "/results",
