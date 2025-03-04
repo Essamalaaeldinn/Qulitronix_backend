@@ -18,8 +18,8 @@ const bootstrap = async () => {
     app.use(cors({ origin: "*" }));
     app.use(express.json());
 
-    // ✅ Serve static files from the 'static' folder
-    app.use("/static", express.static(path.join(__dirname, "static")));
+    // ✅ Serve static files from the 'public' folder
+    app.use(express.static("public"));
 
     await database_connection();
 
