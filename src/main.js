@@ -2,18 +2,27 @@ import express from "express";
 import { config } from "dotenv";
 import { database_connection } from "./DB/connection.js";
 import routerHandler from "./utils/router-handler.utils.js";
-import cors from "cors"; // ✅ Use import instead of require
+import cors from "cors";
+import path from "path";
+import { fileURLToPath } from "url";
 
 config();
+
+// Resolve __dirname in ES module
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const bootstrap = async () => {
     const app = express();
 
-    app.use(cors({ origin: "*" })); // ✅ Move inside function
+    app.use(cors({ origin: "*" }));
     app.use(express.json());
 
+    // ✅ Serve static files from the 'static' folder
+    app.use("/static", express.static(path.join(__dirname, "static")));
+
     await database_connection();
-    
+
     routerHandler(app);
 
     const port = process.env.PORT || 3000;
