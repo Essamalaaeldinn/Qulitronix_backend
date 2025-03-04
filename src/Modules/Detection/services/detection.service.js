@@ -1,50 +1,41 @@
+// services/detectionService.js OR controllers/detectionController.js
+
 import axios from "axios";
-import FormData from "form-data"; // Ensure installed: npm install form-data
-import fetch from "node-fetch"; // Ensure installed: npm install node-fetch
+import FormData from "form-data";
+import fetch from "node-fetch";
 import dotenv from "dotenv";
-import fs from "fs";
 
 dotenv.config();
 
-const API_URL = process.env.API_URL;
+const API_URL = process.env.API_URL; // Ensure this is set in your .env
 
-// Function to download an image from Cloudinary and save it temporarily
-const downloadImage = async (url, path) => {
+// Step 1: Modify `downloadImage` to Use Buffers
+const downloadImage = async (url) => {
   const response = await fetch(url);
-  if (!response.ok) throw new Error(`Failed to download image: ${url}`);
-  const buffer = await response.buffer();
-  fs.writeFileSync(path, buffer);
+  const buffer = await response.arrayBuffer(); // Store as buffer in memory
+  return Buffer.from(buffer); // Convert to Buffer
 };
 
-// Function to send images to the detection API
+// Step 2: Modify `detectDefects` to Use Buffers
 export const detectDefects = async (imageUrls) => {
   try {
-    if (!API_URL) throw new Error("❌ API_URL is not defined in environment variables");
+    if (!API_URL) {
+      throw new Error("API_URL is not defined in environment variables");
+    }
 
-    console.log("🔹 Downloading images before sending to detection API...");
+    console.log("🔹 Downloading images in memory before sending to detection API...");
 
-    // Download images locally before sending
-    const tempPaths = await Promise.all(
+    const formData = new FormData();
+
+    await Promise.all(
       imageUrls.map(async (url, index) => {
-        const tempPath = `temp_image_${index}.jpg`;
-        await downloadImage(url, tempPath);
-        return tempPath;
+        const imageBuffer = await downloadImage(url);
+        formData.append("images", imageBuffer, { filename: `image_${index}.jpg` });
       })
     );
 
-    console.log("✅ Images downloaded successfully:", tempPaths);
+    console.log("🔹 Images added to FormData, preparing request...");
 
-    // Prepare FormData
-    const formData = new FormData();
-    tempPaths.forEach((path, index) => {
-      console.log(`🔹 Attaching file: ${path}`); // Debugging
-      formData.append("images[]", fs.createReadStream(path)); // Ensure API expects an array
-
-    });
-
-    console.log("🔹 FormData Headers:", formData.getHeaders());
-
-    // Send request to detection API
     const response = await axios.post(API_URL, formData, {
       headers: {
         ...formData.getHeaders(),
@@ -52,11 +43,6 @@ export const detectDefects = async (imageUrls) => {
     });
 
     console.log("✅ Detection API Response:", response.data);
-
-    // Clean up temporary image files
-    tempPaths.forEach((path) => {
-      if (fs.existsSync(path)) fs.unlinkSync(path);
-    });
 
     return response.data;
   } catch (error) {
