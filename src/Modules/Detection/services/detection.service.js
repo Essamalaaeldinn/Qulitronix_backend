@@ -1,44 +1,29 @@
-// services/detectionService.js OR controllers/detectionController.js
-
 import axios from "axios";
-import FormData from "form-data";
-import fetch from "node-fetch";
 import dotenv from "dotenv";
 
 dotenv.config();
 
-const API_URL = process.env.API_URL; // Ensure this is set in your .env
+const API_URL = process.env.API_URL;
 
-// Step 1: Modify `downloadImage` to Use Buffers
-const downloadImage = async (url) => {
-  const response = await fetch(url);
-  const buffer = await response.arrayBuffer(); // Store as buffer in memory
-  return Buffer.from(buffer); // Convert to Buffer
-};
 
-// Step 2: Modify `detectDefects` to Use Buffers
 export const detectDefects = async (imageUrls) => {
   try {
     if (!API_URL) {
       throw new Error("API_URL is not defined in environment variables");
     }
 
-    console.log("🔹 Downloading images in memory before sending to detection API...");
+    console.log("🔹 Preparing JSON payload with image URLs...");
 
-    const formData = new FormData();
+    // Create a JSON payload with the image URLs
+    const payload = {
+      images: imageUrls, // Array of URLs, e.g., ["https://res.cloudinary.com/.../image.png"]
+    };
 
-    await Promise.all(
-      imageUrls.map(async (url, index) => {
-        const imageBuffer = await downloadImage(url);
-        formData.append("images", imageBuffer, { filename: `image_${index}.jpg` });
-      })
-    );
+    console.log("🔹 Payload:", payload);
 
-    console.log("🔹 Images added to FormData, preparing request...");
-
-    const response = await axios.post(API_URL, formData, {
+    const response = await axios.post(API_URL, payload, {
       headers: {
-        ...formData.getHeaders(),
+        "Content-Type": "application/json", // Set the content type to JSON
       },
     });
 
@@ -46,7 +31,7 @@ export const detectDefects = async (imageUrls) => {
 
     return response.data;
   } catch (error) {
-    console.error("❌ Error calling the detection API:", error.response?.data || error.message);
+    console.error("❌ Error calling the detection API:", error.response ? error.response : error.message);
     throw new Error("Detection API request failed");
   }
 };

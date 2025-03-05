@@ -12,6 +12,10 @@ dotenv.config();
 
 const detectionController = Router();
 
+// 🔹 Derive the base URL from API_URL (remove /batch-predict path)
+const API_URL = process.env.API_URL; // e.g., http://ec2-51-20-245-170.eu-north-1.compute.amazonaws.com/batch-predict
+const API_BASE_URL = API_URL.split("/batch-predict")[0]; // e.g., http://ec2-51-20-245-170.eu-north-1.compute.amazonaws.com
+
 // 🔹 Configure Cloudinary
 cloudinary.v2.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -63,11 +67,19 @@ detectionController.post(
 
       console.log("Detection API Response:", detectionResults); // ✅ Debugging step
 
-      // 🔹 Store detection results in MongoDB
+      // 🔹 Store detection results in MongoDB with full URLs
       const savedResults = await Promise.all(
         detectionResults.batch_results.map(async (result) => {
           if (!result.error) {
-            return await DetectionResult.create(result);
+            // Prepend the base URL to heatmap_url and annotated_image_url before saving
+            const updatedResult = {
+              ...result,
+              heatmap_url: result.heatmap_url ? `${API_BASE_URL}${result.heatmap_url}` : undefined,
+              annotated_image_url: result.annotated_image_url
+                ? `${API_BASE_URL}${result.annotated_image_url}`
+                : undefined,
+            };
+            return await DetectionResult.create(updatedResult);
           }
         })
       );
@@ -82,13 +94,36 @@ detectionController.post(
     }
   })
 );
+
 // 🟢 GET Detection Results
 detectionController.get(
   "/results",
   errorHandler(async (req, res) => {
     try {
       const results = await DetectionResult.find().sort({ createdAt: -1 });
-      return res.status(200).json({ message: "Detection results retrieved", results });
+
+      // 🔹 Ensure full URLs are returned (in case they weren't saved with full URLs previously)
+      const updatedResults = results.map((result) => {
+        const resultObj = result.toObject();
+        return {
+          ...resultObj,
+          heatmap_url: resultObj.heatmap_url?.startsWith("http")
+            ? resultObj.heatmap_url
+            : resultObj.heatmap_url
+            ? `${API_BASE_URL}${resultObj.heatmap_url}`
+            : undefined,
+          annotated_image_url: resultObj.annotated_image_url?.startsWith("http")
+            ? resultObj.annotated_image_url
+            : resultObj.annotated_image_url
+            ? `${API_BASE_URL}${resultObj.annotated_image_url}`
+            : undefined,
+        };
+      });
+
+      return res.status(200).json({
+        message: "Detection results retrieved",
+        results: updatedResults,
+      });
     } catch (error) {
       return res.status(500).json({ message: "Error fetching results", error: error.message });
     }
@@ -124,6 +159,23 @@ detectionController.get(
         percentage: ((defectCounts[key] / (totalPCBs || 1)) * 100).toFixed(2),
       }));
 
+      // 🔹 Ensure recent_defects includes full URLs
+      const recentDefects = results.slice(-3).map((result, index) => ({
+        pcb_id: `PCB #${index + 1}`,
+        defects: result.predictions.map((p) => p.class_name),
+        image_url: result.image_url,
+        heatmap_url: result.heatmap_url?.startsWith("http")
+          ? result.heatmap_url
+          : result.heatmap_url
+          ? `${API_BASE_URL}${result.heatmap_url}`
+          : undefined,
+        annotated_image_url: result.annotated_image_url?.startsWith("http")
+          ? result.annotated_image_url
+          : result.annotated_image_url
+          ? `${API_BASE_URL}${result.annotated_image_url}`
+          : undefined,
+      }));
+
       return res.status(200).json({
         summary: {
           defect_percentages: defectPercentages,
@@ -131,10 +183,7 @@ detectionController.get(
             { name: "Good PCBs", value: goodPCBs },
             { name: "Defective PCBs", value: defectivePCBs },
           ],
-          recent_defects: results.slice(-3).map((result, index) => ({
-            pcb_id: `PCB #${index + 1}`,
-            defects: result.predictions.map((p) => p.class_name),
-          })),
+          recent_defects: recentDefects,
         },
       });
     } catch (error) {

@@ -15,6 +15,7 @@ const detectionResultSchema = new mongoose.Schema({
   ],
   image_url: String,
   heatmap_url: String,
+  annotated_image_url: String,
 }, { timestamps: true });
 
 const DetectionResult = mongoose.model("DetectionResult", detectionResultSchema);
