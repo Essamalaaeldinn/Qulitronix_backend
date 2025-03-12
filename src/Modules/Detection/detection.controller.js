@@ -12,9 +12,11 @@ dotenv.config();
 
 const detectionController = Router();
 
-// 🔹 Derive the base URL from API_URL (remove /batch-predict path)
-const API_URL = process.env.API_URL; // e.g., http://ec2-51-20-245-170.eu-north-1.compute.amazonaws.com/batch-predict
-const API_BASE_URL = API_URL.split("/batch-predict")[0]; // e.g., http://ec2-51-20-245-170.eu-north-1.compute.amazonaws.com
+// 🔹 Derive API Base URL safely
+const API_URL = process.env.API_URL || "";
+const API_BASE_URL = API_URL.includes("/batch-predict")
+  ? API_URL.split("/batch-predict")[0]
+  : API_URL; // Ensure it works even if `/batch-predict` is missing
 
 // 🔹 Configure Cloudinary
 cloudinary.v2.config({
@@ -27,9 +29,9 @@ cloudinary.v2.config({
 const storage = new CloudinaryStorage({
   cloudinary: cloudinary.v2,
   params: {
-    folder: "pcb-defects", // Cloudinary folder where images will be stored
-    format: async (req, file) => "png", // Convert all images to PNG
-    public_id: (req, file) => file.originalname.split(".")[0], // Keep original file name
+    folder: "pcb-defects",
+    format: async () => "png", // Convert all images to PNG
+    public_id: (req, file) => file.originalname.split(".")[0],
   },
 });
 
@@ -44,7 +46,7 @@ detectionController.post(
   upload.array("images"),
   errorHandler(async (req, res) => {
     try {
-      console.log("Files received:", req.files); // ✅ Debugging step
+      console.log("✅ Files received:", req.files);
 
       if (!req.files || req.files.length === 0) {
         return res.status(400).json({ message: "No images uploaded" });
@@ -52,34 +54,39 @@ detectionController.post(
 
       // 🔹 Ensure Cloudinary uploaded all images
       const imageUrls = req.files.map((file) => file.path);
-      console.log("Cloudinary URLs:", imageUrls); // ✅ Debugging step
+      console.log("✅ Cloudinary URLs:", imageUrls);
 
-      if (!imageUrls || !Array.isArray(imageUrls) || imageUrls.length !== req.files.length) {
-        return res.status(500).json({ message: "Some files failed to upload to Cloudinary" });
+      if (imageUrls.length !== req.files.length) {
+        return res
+          .status(500)
+          .json({ message: "Some files failed to upload to Cloudinary" });
       }
 
-      // 🔹 Pass Cloudinary URLs to the detection model
+      // 🔹 Call detectDefects and Log API URL
+      console.log("🔹 Calling detection API:", API_URL);
       const detectionResults = await detectDefects(imageUrls);
 
       if (!detectionResults || !detectionResults.batch_results) {
-        return res.status(500).json({ message: "Detection API returned an invalid response" });
+        return res
+          .status(500)
+          .json({ message: "Detection API returned an invalid response" });
       }
 
-      console.log("Detection API Response:", detectionResults); // ✅ Debugging step
+      console.log("✅ Detection API Response:", detectionResults);
 
-      // 🔹 Store detection results in MongoDB with full URLs
+      // 🔹 Store detection results in MongoDB
       const savedResults = await Promise.all(
         detectionResults.batch_results.map(async (result) => {
           if (!result.error) {
-            // Prepend the base URL to heatmap_url and annotated_image_url before saving
-            const updatedResult = {
+            return await DetectionResult.create({
               ...result,
-              heatmap_url: result.heatmap_url ? `${API_BASE_URL}${result.heatmap_url}` : undefined,
+              heatmap_url: result.heatmap_url
+                ? `${API_BASE_URL}${result.heatmap_url}`
+                : undefined,
               annotated_image_url: result.annotated_image_url
                 ? `${API_BASE_URL}${result.annotated_image_url}`
                 : undefined,
-            };
-            return await DetectionResult.create(updatedResult);
+            });
           }
         })
       );
@@ -89,8 +96,10 @@ detectionController.post(
         results: savedResults.filter(Boolean),
       });
     } catch (error) {
-      console.error("Error processing images:", error.message); // ✅ Debugging step
-      return res.status(500).json({ message: "Error processing images", error: error.message });
+      console.error("❌ Error processing images:", error.message);
+      return res
+        .status(500)
+        .json({ message: "Error processing images", error: error.message });
     }
   })
 );
@@ -102,30 +111,30 @@ detectionController.get(
     try {
       const results = await DetectionResult.find().sort({ createdAt: -1 });
 
-      // 🔹 Ensure full URLs are returned (in case they weren't saved with full URLs previously)
-      const updatedResults = results.map((result) => {
-        const resultObj = result.toObject();
-        return {
-          ...resultObj,
-          heatmap_url: resultObj.heatmap_url?.startsWith("http")
-            ? resultObj.heatmap_url
-            : resultObj.heatmap_url
-            ? `${API_BASE_URL}${resultObj.heatmap_url}`
-            : undefined,
-          annotated_image_url: resultObj.annotated_image_url?.startsWith("http")
-            ? resultObj.annotated_image_url
-            : resultObj.annotated_image_url
-            ? `${API_BASE_URL}${resultObj.annotated_image_url}`
-            : undefined,
-        };
-      });
+      const updatedResults = results.map((result) => ({
+        ...result.toObject(),
+        heatmap_url: result.heatmap_url?.startsWith("http")
+          ? result.heatmap_url
+          : result.heatmap_url
+          ? `${API_BASE_URL}${result.heatmap_url}`
+          : undefined,
+        annotated_image_url: result.annotated_image_url?.startsWith("http")
+          ? result.annotated_image_url
+          : result.annotated_image_url
+          ? `${API_BASE_URL}${result.annotated_image_url}`
+          : undefined,
+      }));
 
-      return res.status(200).json({
-        message: "Detection results retrieved",
-        results: updatedResults,
-      });
+      return res
+        .status(200)
+        .json({
+          message: "Detection results retrieved",
+          results: updatedResults,
+        });
     } catch (error) {
-      return res.status(500).json({ message: "Error fetching results", error: error.message });
+      return res
+        .status(500)
+        .json({ message: "Error fetching results", error: error.message });
     }
   })
 );
@@ -136,8 +145,6 @@ detectionController.get(
   errorHandler(async (req, res) => {
     try {
       const results = await DetectionResult.find();
-
-      // Calculate defect statistics
       let defectCounts = {};
       let defectivePCBs = 0;
       let goodPCBs = 0;
@@ -146,7 +153,8 @@ detectionController.get(
         if (result.predictions.length > 0) {
           defectivePCBs++;
           result.predictions.forEach((defect) => {
-            defectCounts[defect.class_name] = (defectCounts[defect.class_name] || 0) + 1;
+            defectCounts[defect.class_name] =
+              (defectCounts[defect.class_name] || 0) + 1;
           });
         } else {
           goodPCBs++;
@@ -159,21 +167,16 @@ detectionController.get(
         percentage: ((defectCounts[key] / (totalPCBs || 1)) * 100).toFixed(2),
       }));
 
-      // 🔹 Ensure recent_defects includes full URLs
       const recentDefects = results.slice(-3).map((result, index) => ({
         pcb_id: `PCB #${index + 1}`,
         defects: result.predictions.map((p) => p.class_name),
         image_url: result.image_url,
         heatmap_url: result.heatmap_url?.startsWith("http")
           ? result.heatmap_url
-          : result.heatmap_url
-          ? `${API_BASE_URL}${result.heatmap_url}`
-          : undefined,
+          : `${API_BASE_URL}${result.heatmap_url}`,
         annotated_image_url: result.annotated_image_url?.startsWith("http")
           ? result.annotated_image_url
-          : result.annotated_image_url
-          ? `${API_BASE_URL}${result.annotated_image_url}`
-          : undefined,
+          : `${API_BASE_URL}${result.annotated_image_url}`,
       }));
 
       return res.status(200).json({
@@ -187,7 +190,9 @@ detectionController.get(
         },
       });
     } catch (error) {
-      return res.status(500).json({ message: "Error generating summary", error: error.message });
+      return res
+        .status(500)
+        .json({ message: "Error generating summary", error: error.message });
     }
   })
 );

@@ -5,33 +5,41 @@ dotenv.config();
 
 const API_URL = process.env.API_URL;
 
-
 export const detectDefects = async (imageUrls) => {
   try {
     if (!API_URL) {
-      throw new Error("API_URL is not defined in environment variables");
+      throw new Error("❌ API_URL is not defined in environment variables.");
+    }
+
+    if (!Array.isArray(imageUrls) || imageUrls.length === 0) {
+      throw new Error("❌ No valid image URLs provided.");
     }
 
     console.log("🔹 Preparing JSON payload with image URLs...");
+    const payload = { images: imageUrls };
 
-    // Create a JSON payload with the image URLs
-    const payload = {
-      images: imageUrls, // Array of URLs, e.g., ["https://res.cloudinary.com/.../image.png"]
-    };
-
-    console.log("🔹 Payload:", payload);
+    console.log("🔹 Payload:", JSON.stringify(payload, null, 2));
 
     const response = await axios.post(API_URL, payload, {
       headers: {
-        "Content-Type": "application/json", // Set the content type to JSON
+        "Content-Type": "application/json",
       },
     });
 
-    console.log("✅ Detection API Response:", response.data);
+    if (!response || !response.data) {
+      throw new Error("❌ No response data received from API.");
+    }
 
+    console.log("✅ Detection API Response:", response.data);
     return response.data;
   } catch (error) {
-    console.error("❌ Error calling the detection API:", error.response ? error.response : error.message);
-    throw new Error("Detection API request failed");
+    if (error.response) {
+      console.error("❌ API Error:", error.response.data);
+    } else if (error.request) {
+      console.error("❌ Network Error: No response received from API.");
+    } else {
+      console.error("❌ Unexpected Error:", error.message);
+    }
+    throw new Error("Detection API request failed.");
   }
 };
