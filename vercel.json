@@ -9,7 +9,7 @@
   ],
   "functions": {
     "/detection/upload": {
-      "maxDuration": 60
+      "maxDuration": 600000
     }
   }
 }
