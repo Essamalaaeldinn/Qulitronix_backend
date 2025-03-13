@@ -43,6 +43,7 @@ detectionController.use(errorHandler(authenticationMiddleware()));
 // 🟢 POST: Upload Images for Defect Detection
 detectionController.post(
   "/upload",
+  authenticationMiddleware(),
   upload.array("images"),
   errorHandler(async (req, res) => {
     try {
@@ -79,6 +80,7 @@ detectionController.post(
         detectionResults.batch_results.map(async (result) => {
           if (!result.error) {
             return await DetectionResult.create({
+              userId: req.user._id, // Store the user ID
               ...result,
               heatmap_url: result.heatmap_url
                 ? `${API_BASE_URL}${result.heatmap_url}`
@@ -107,9 +109,11 @@ detectionController.post(
 // 🟢 GET Detection Results
 detectionController.get(
   "/results",
+  authenticationMiddleware(),
   errorHandler(async (req, res) => {
     try {
-      const results = await DetectionResult.find().sort({ createdAt: -1 });
+      const userId = req.user._id; // Get user ID from the authenticated request
+      const results = await DetectionResult.find({ userId }).sort({ createdAt: -1 });
 
       const updatedResults = results.map((result) => ({
         ...result.toObject(),
@@ -125,12 +129,10 @@ detectionController.get(
           : undefined,
       }));
 
-      return res
-        .status(200)
-        .json({
-          message: "Detection results retrieved",
-          results: updatedResults,
-        });
+      return res.status(200).json({
+        message: "User-specific detection results retrieved",
+        results: updatedResults,
+      });
     } catch (error) {
       return res
         .status(500)
@@ -138,6 +140,7 @@ detectionController.get(
     }
   })
 );
+
 
 // 🟢 GET Summary of Defect Analysis
 detectionController.get(
