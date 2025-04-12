@@ -13,50 +13,41 @@ dotenv.config();
 
 const detectionController = Router();
 
-// 🔹 Derive API Base URL safely
 const API_URL = process.env.API_URL || "";
 const API_BASE_URL = API_URL.includes("/batch-predict")
   ? API_URL.split("/batch-predict")[0]
-  : API_URL; // Ensure it works even if `/batch-predict` is missing
+  : API_URL;
 
-// 🔹 Configure Cloudinary
 cloudinary.v2.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-// 🔹 Setup Multer with Cloudinary Storage
 const storage = new CloudinaryStorage({
   cloudinary: cloudinary.v2,
   params: {
     folder: "pcb-defects",
-    format: async () => "png", // Convert all images to PNG
+    format: async () => "png",
     public_id: (req, file) => file.originalname.split(".")[0],
   },
 });
 
 const upload = multer({ storage });
 
-// Apply authentication only to secured routes
 detectionController.use(errorHandler(authenticationMiddleware()));
 
-// 🟢 POST: Upload Images for Defect Detection
 detectionController.post(
   "/upload",
   authenticationMiddleware(),
   upload.array("images"),
   errorHandler(async (req, res) => {
     try {
-      console.log("✅ Files received:", req.files);
-
       if (!req.files || req.files.length === 0) {
         return res.status(400).json({ message: "No images uploaded" });
       }
 
-      // 🔹 Ensure Cloudinary uploaded all images
       const imageUrls = req.files.map((file) => file.path);
-      console.log("✅ Cloudinary URLs:", imageUrls);
 
       if (imageUrls.length !== req.files.length) {
         return res
@@ -64,8 +55,6 @@ detectionController.post(
           .json({ message: "Some files failed to upload to Cloudinary" });
       }
 
-      // 🔹 Call detectDefects and Log API URL
-      console.log("🔹 Calling detection API:", API_URL);
       const detectionResults = await detectDefects(imageUrls);
 
       if (!detectionResults || !detectionResults.batch_results) {
@@ -74,14 +63,11 @@ detectionController.post(
           .json({ message: "Detection API returned an invalid response" });
       }
 
-      console.log("✅ Detection API Response:", detectionResults);
-
-      // 🔹 Store detection results in MongoDB
       const savedResults = await Promise.all(
         detectionResults.batch_results.map(async (result) => {
           if (!result.error) {
             return await DetectionResult.create({
-              userId: req.authUser._id, // Store the authenticated user's ID
+              userId: req.authUser._id,
               ...result,
               heatmap_url: result.heatmap_url
                 ? `${API_BASE_URL}${result.heatmap_url}`
@@ -99,7 +85,6 @@ detectionController.post(
         results: savedResults.filter(Boolean),
       });
     } catch (error) {
-      console.error("❌ Error processing images:", error.message);
       return res
         .status(500)
         .json({ message: "Error processing images", error: error.message });
@@ -107,13 +92,12 @@ detectionController.post(
   })
 );
 
-// 🟢 GET: User-specific Detection Results
 detectionController.get(
   "/results",
   authenticationMiddleware(),
   errorHandler(async (req, res) => {
     try {
-      const userId = req.authUser._id; // Use authenticated user's ID
+      const userId = req.authUser._id;
       const results = await DetectionResult.find({ userId }).sort({
         createdAt: -1,
       });
@@ -144,7 +128,6 @@ detectionController.get(
   })
 );
 
-// 🟢 GET: Summary of User-specific Defect Analysis
 detectionController.get(
   "/dashboard",
   errorHandler(async (req, res) => {
@@ -192,16 +175,25 @@ detectionController.get(
             : `${API_BASE_URL}${result.annotated_image_url}`,
         }));
 
-      // Fetch weekly summary
       const sevenDaysAgo = new Date();
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-      const weeklySummary = await DailySummary.find({
+      const rawWeeklySummary = await DailySummary.find({
         userId,
         date: { $gte: sevenDaysAgo.toISOString().split("T")[0] },
       }).sort({ date: 1 });
 
-      // Calculate and save defective percentage for today
+      const weeklySummary = rawWeeklySummary.map((entry) => {
+        const dayName = new Date(entry.date).toLocaleDateString("en-US", {
+          weekday: "short",
+        });
+
+        return {
+          name: dayName,
+          faultRate: parseFloat(entry.defective_percentage) || 0,
+        };
+      });
+
       const defectivePercentage = (
         (defectivePCBs / (goodPCBs + defectivePCBs || 1)) *
         100
