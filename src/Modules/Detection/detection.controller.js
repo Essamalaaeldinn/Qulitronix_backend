@@ -7,6 +7,7 @@ import { errorHandler } from "../../Middleware/error-handler.middleware.js";
 import cloudinary from "cloudinary";
 import { CloudinaryStorage } from "multer-storage-cloudinary";
 import dotenv from "dotenv";
+import DailySummary from "../../DB/models/DailySummery.model.js";
 
 dotenv.config();
 
@@ -43,6 +44,7 @@ detectionController.use(errorHandler(authenticationMiddleware()));
 // 🟢 POST: Upload Images for Defect Detection
 detectionController.post(
   "/upload",
+  authenticationMiddleware(),
   upload.array("images"),
   errorHandler(async (req, res) => {
     try {
@@ -79,6 +81,7 @@ detectionController.post(
         detectionResults.batch_results.map(async (result) => {
           if (!result.error) {
             return await DetectionResult.create({
+              userId: req.authUser._id, // Store the authenticated user's ID
               ...result,
               heatmap_url: result.heatmap_url
                 ? `${API_BASE_URL}${result.heatmap_url}`
@@ -104,12 +107,15 @@ detectionController.post(
   })
 );
 
-// 🟢 GET Detection Results
+// 🟢 GET: User-specific Detection Results
 detectionController.get(
   "/results",
   errorHandler(async (req, res) => {
     try {
-      const results = await DetectionResult.find().sort({ createdAt: -1 });
+      const userId = req.authUser._id; // Use authenticated user's ID
+      const results = await DetectionResult.find({ userId }).sort({
+        createdAt: -1,
+      });
 
       const updatedResults = results.map((result) => ({
         ...result.toObject(),
@@ -125,12 +131,10 @@ detectionController.get(
           : undefined,
       }));
 
-      return res
-        .status(200)
-        .json({
-          message: "Detection results retrieved",
-          results: updatedResults,
-        });
+      return res.status(200).json({
+        message: "User-specific detection results retrieved",
+        results: updatedResults,
+      });
     } catch (error) {
       return res
         .status(500)
@@ -139,15 +143,18 @@ detectionController.get(
   })
 );
 
-// 🟢 GET Summary of Defect Analysis
+// 🟢 GET: Summary of User-specific Defect Analysis
 detectionController.get(
-  "/summary",
+  "/dashboard",
   errorHandler(async (req, res) => {
     try {
-      const results = await DetectionResult.find();
+      const userId = req.authUser._id;
+      const results = await DetectionResult.find({ userId });
+
       let defectCounts = {};
       let defectivePCBs = 0;
       let goodPCBs = 0;
+      let totalDefects = 0;
 
       results.forEach((result) => {
         if (result.predictions.length > 0) {
@@ -155,29 +162,55 @@ detectionController.get(
           result.predictions.forEach((defect) => {
             defectCounts[defect.class_name] =
               (defectCounts[defect.class_name] || 0) + 1;
+            totalDefects++;
           });
         } else {
           goodPCBs++;
         }
       });
 
-      const totalPCBs = goodPCBs + defectivePCBs;
-      const defectPercentages = Object.keys(defectCounts).map((key) => ({
-        name: key,
-        percentage: ((defectCounts[key] / (totalPCBs || 1)) * 100).toFixed(2),
-      }));
+      const defectPercentages = Object.entries(defectCounts).map(
+        ([name, count]) => ({
+          name,
+          percentage: ((count / (totalDefects || 1)) * 100).toFixed(2),
+        })
+      );
 
-      const recentDefects = results.slice(-3).map((result, index) => ({
-        pcb_id: `PCB #${index + 1}`,
-        defects: result.predictions.map((p) => p.class_name),
-        image_url: result.image_url,
-        heatmap_url: result.heatmap_url?.startsWith("http")
-          ? result.heatmap_url
-          : `${API_BASE_URL}${result.heatmap_url}`,
-        annotated_image_url: result.annotated_image_url?.startsWith("http")
-          ? result.annotated_image_url
-          : `${API_BASE_URL}${result.annotated_image_url}`,
-      }));
+      const recentDefects = results
+        .slice(-3)
+        .reverse()
+        .map((result, index) => ({
+          pcb_id: `PCB #${index + 1}`,
+          defects: result.predictions.map((p) => p.class_name),
+          image_url: result.image_url,
+          heatmap_url: result.heatmap_url?.startsWith("http")
+            ? result.heatmap_url
+            : `${API_BASE_URL}${result.heatmap_url}`,
+          annotated_image_url: result.annotated_image_url?.startsWith("http")
+            ? result.annotated_image_url
+            : `${API_BASE_URL}${result.annotated_image_url}`,
+        }));
+
+      // Fetch weekly summary
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+      const weeklySummary = await DailySummary.find({
+        userId,
+        date: { $gte: sevenDaysAgo.toISOString().split("T")[0] },
+      }).sort({ date: 1 });
+
+      // Calculate and save defective percentage for today
+      const defectivePercentage = (
+        (defectivePCBs / (goodPCBs + defectivePCBs || 1)) *
+        100
+      ).toFixed(2);
+
+      await DailySummary.findOneAndUpdate(
+        { userId, date: new Date().toISOString().split("T")[0] },
+        { $set: { defective_percentage: defectivePercentage } },
+        { upsert: true }
+      );
 
       return res.status(200).json({
         summary: {
@@ -186,13 +219,17 @@ detectionController.get(
             { name: "Good PCBs", value: goodPCBs },
             { name: "Defective PCBs", value: defectivePCBs },
           ],
+          total_defects: totalDefects,
           recent_defects: recentDefects,
+          weekly_summary: weeklySummary,
+          message:
+            "Dashboard data retrieved and daily summary saved successfully",
         },
       });
     } catch (error) {
       return res
         .status(500)
-        .json({ message: "Error generating summary", error: error.message });
+        .json({ message: "Error processing dashboard", error: error.message });
     }
   })
 );

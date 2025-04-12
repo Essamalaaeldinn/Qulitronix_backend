@@ -13,22 +13,22 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const bootstrap = async () => {
-    const app = express();
+  const app = express();
 
-    app.use(cors({ origin: "*" }));
-    app.use(express.json());
+  app.use(cors({ origin: "*" }));
+  app.use(express.json());
 
-    // ✅ Serve static files from the 'public' folder
-    app.use(express.static("public"));
+  // ✅ Serve static files from the 'public' folder
+  app.use(express.static("public"));
 
-    await database_connection();
+  await database_connection();
 
-    routerHandler(app);
+  routerHandler(app);
 
-    const port = process.env.PORT || 3000;
-    app.listen(port, () => {
-        console.log(`Server is running on port ${port}!`);
-    });
+  const port = process.env.PORT || 3000;
+  app.listen(port, "127.0.0.1", () => {
+    console.log(`Server is running locally on port ${port}!`);
+  });
 };
 
 export default bootstrap;
