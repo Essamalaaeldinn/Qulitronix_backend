@@ -81,7 +81,11 @@ detectionController.post(
         detectionResults.batch_results.map(async (result) => {
           if (!result.error) {
             return await DetectionResult.create({
+<<<<<<< HEAD
               userId: req.authUser._id, // Store the authenticated user's ID
+=======
+              userId: req.user._id, // Store the user ID
+>>>>>>> 1823c599cedeb8628aa87a16198c6104990e40bd
               ...result,
               heatmap_url: result.heatmap_url
                 ? `${API_BASE_URL}${result.heatmap_url}`
@@ -110,12 +114,18 @@ detectionController.post(
 // 🟢 GET: User-specific Detection Results
 detectionController.get(
   "/results",
+  authenticationMiddleware(),
   errorHandler(async (req, res) => {
     try {
+<<<<<<< HEAD
       const userId = req.authUser._id; // Use authenticated user's ID
       const results = await DetectionResult.find({ userId }).sort({
         createdAt: -1,
       });
+=======
+      const userId = req.user._id; // Get user ID from the authenticated request
+      const results = await DetectionResult.find({ userId }).sort({ createdAt: -1 });
+>>>>>>> 1823c599cedeb8628aa87a16198c6104990e40bd
 
       const updatedResults = results.map((result) => ({
         ...result.toObject(),
@@ -143,7 +153,12 @@ detectionController.get(
   })
 );
 
+<<<<<<< HEAD
 // 🟢 GET: Summary of User-specific Defect Analysis
+=======
+
+// 🟢 GET Summary of Defect Analysis
+>>>>>>> 1823c599cedeb8628aa87a16198c6104990e40bd
 detectionController.get(
   "/dashboard",
   errorHandler(async (req, res) => {
