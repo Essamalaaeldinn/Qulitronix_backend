@@ -1,43 +1,43 @@
 import Joi from "joi"
 
 
-
-// validate() only works with => Joi.object({}) 
-
 export const signUpSchema = {
-    body: Joi.object({
-        username: Joi.string().alphanum().messages({
-            'string.alphanum': 'Username must be alphanumeric should contain only a-z , A-Z , 0-9'
-        }),
-        email: Joi.string().email({
-            tlds:{
-                allow: ['com', 'net'] ,
-                // deny: ['yahoo']
-            },
-            // minDomainSegments: 2,
-            maxDomainSegments: 2        // gmail.com
-        }),
-        password: Joi.string().regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*])[A-Za-z\d@$!%*]{8,}$/ ),
-        confirmPassword: Joi.string().valid(Joi.ref('password')),
-        phone: Joi.string(),
-    })
-    .options({presence: 'required'})      // all keys values are required 
-}
-
+  body: Joi.object({
+    username: Joi.string().alphanum().messages({
+      'string.alphanum': 'Username must be alphanumeric and contain only a-z, A-Z, 0-9',
+    }),
+    email: Joi.string().email({
+      tlds: {
+        allow: ['com', 'net'],
+      },
+      maxDomainSegments: 2,
+    }),
+    password: Joi.string()
+      .pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^\w\s])[A-Za-z\d\W_]{8,}$/)
+      .message(
+        'Password must be at least 8 characters long and include uppercase, lowercase, number, and special character.'
+      ),
+    confirmPassword: Joi.string()
+      .valid(Joi.ref('password'))
+      .messages({ 'any.only': 'Passwords do not match' }),
+    phone: Joi.string(),
+  }).options({ presence: 'required' }),
+};
 
 
 export const signInSchema = {
-    body: Joi.object({
-        email: Joi.string().email({
-            tlds:{
-                allow: ['com', 'net'] ,
-            },
-            maxDomainSegments: 2        
-        }),
-        password: Joi.string().regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*])[A-Za-z\d@$!%*]{8,}$/ )
-    })
-    .options({presence: 'required'})
-}
+  body: Joi.object({
+    email: Joi.string().email({
+      tlds: {
+        allow: ['com', 'net'],
+      },
+      maxDomainSegments: 2,
+    }),
+    password: Joi.string().min(1).messages({
+      'string.empty': 'Password cannot be empty',
+    }),
+  }).options({ presence: 'required' }),
+};
 
 
 export const forgetPasswordSchema = {
@@ -53,18 +53,25 @@ export const forgetPasswordSchema = {
 }
 
 
-
 export const resetPasswordSchema = {
-    body: Joi.object({
-        email: Joi.string().email({
-            tlds:{
-                allow: ['com', 'net'] ,
-            },
-            maxDomainSegments: 2        
-        }),
-        password: Joi.string().regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*])[A-Za-z\d@$!%*]{8,}$/ ),
-        confirmPassword: Joi.string().valid(Joi.ref('password')),
-        otp: Joi.number()
-    })
-    .options({presence: 'required'})
+  body: Joi.object({
+    email: Joi.string().email({
+      tlds: {
+        allow: ['com', 'net'],
+      },
+      maxDomainSegments: 2,
+    }),
+    password: Joi.string()
+      .pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^\w\s])[A-Za-z\d\W_]{8,}$/)
+      .messages({
+        'string.pattern.base':
+          'Password must be at least 8 characters long and include uppercase, lowercase, number, and special character.',
+      }),
+    confirmPassword: Joi.string()
+      .valid(Joi.ref('password'))
+      .messages({ 'any.only': 'Passwords do not match' }),
+    otp: Joi.number().messages({
+      'number.base': 'OTP must be a number',
+    }),
+  }).options({ presence: 'required' }),
 }
