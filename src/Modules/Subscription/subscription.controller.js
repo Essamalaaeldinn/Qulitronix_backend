@@ -3,7 +3,7 @@ import { createCheckoutSession, stripeWebhook } from "./services/subscription.se
 
 const router = express.Router();
 
+router.post("/", stripeWebhook); // Changed from "/webhook" to "/"
 router.post("/checkout", createCheckoutSession);
-router.post("/webhook", express.raw({ type: "application/json" }), stripeWebhook);
 
 export default router;

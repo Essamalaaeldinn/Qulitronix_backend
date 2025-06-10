@@ -4,59 +4,39 @@ import User from "../DB/models/users.model.js";
 
 // Middleware to authenticate users
 export const authenticationMiddleware = () => {
-  return async (req, res, next) => {
-    try {
-      const accesstoken =
-        req.headers.authorization?.split(" ")[1] || req.headers.accesstoken;
+    return async (req, res, next) => {
+        const accessToken = req.headers.authorization?.split(" ")[1] || req.headers.accesstoken;
+        
+        if (!accessToken) {
+            return res.status(400).json({ message: "No access token found, please login" });
+        }
 
-      if (!accesstoken) {
-        return res
-          .status(400)
-          .json({ message: "No access token found, please login" });
-      }
+        try {
+            const decodedData = jwt.verify(accessToken, process.env.JWT_SECRET_LOGIN);
 
-      // Verify token
-      const decodedData = jwt.verify(accesstoken, process.env.JWT_SECRET_LOGIN);
+            const isTokenBlackListed = await BlackListTokens.findOne({ tokenId: decodedData.jti });
+            if (isTokenBlackListed) {
+                return res.status(401).json({ message: "Token is blacklisted, please login" });
+            }
 
-      // Check if token is blacklisted
-      const isTokenBlackListed = await BlackListTokens.findOne({
-        tokenId: decodedData.jti,
-      });
+            const user = await User.findById(decodedData._id, "-password -__v"); // Ensure photosPerDay is included
+            if (!user) {
+                return res.status(401).json({ message: "User not found, please sign up" });
+            }
 
-      if (isTokenBlackListed) {
-        return res
-          .status(401)
-          .json({ message: "Token is blacklisted, please login" });
-      }
+            req.authUser = {
+                ...user._doc,
+                token: {
+                    tokenId: decodedData.jti,
+                    expiryDate: decodedData.exp,
+                },
+            };
 
-      // Find user in database
-      const user = await User.findById(decodedData._id).select(
-        "-password -__v"
-      );
-
-      if (!user) {
-        return res
-          .status(401)
-          .json({ message: "User not found, please sign up" });
-      }
-
-      // Attach user data to request object
-      req.authUser = {
-        _id: user._id, // Ensure the user ID is accessible
-        email: user.email, // Include essential user details
-        token: {
-          tokenId: decodedData.jti,
-          expiryDate: decodedData.exp,
-        },
-      };
-
-      next();
-    } catch (error) {
-      return res
-        .status(401)
-        .json({ message: "Invalid or expired access token" });
-    }
-  };
+            next();
+        } catch (error) {
+            return res.status(401).json({ message: "Invalid or expired access token" });
+        }
+    };
 };
 
 // Middleware to verify refresh token

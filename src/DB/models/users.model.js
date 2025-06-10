@@ -31,31 +31,31 @@ const userSchema = new mongoose.Schema(
     },
     dateOfBirth: {
       type: Date,
-      required: false, 
+      required: false,
     },
     permanentAddress: {
       type: String,
-      required: false, 
+      required: false,
     },
     postalCode: {
       type: String,
-      required: false, 
+      required: false,
     },
     presentAddress: {
       type: String,
-      required: false, 
+      required: false,
     },
     city: {
       type: String,
-      required: false, 
+      required: false,
     },
     country: {
       type: String,
-      required: false, 
+      required: false,
     },
     profileImage: {
       type: String,
-      required: false, 
+      required: false,
     },
     isDeleted: {
       type: Boolean,
@@ -65,13 +65,22 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    stripeCustomerId: { type: String },
+    stripeSubscriptionId: { type: String },
     otp: String,
     isPremium: { type: Boolean, default: false },
     subscriptionDate: Date,
-    subscriptionStatus: { type: String, enum: ["subscribed", "canceled"], default: "canceled" },
-    plan: { type: String, enum: ["basic", "silver", "gold", "diamond"], default: "basic" },
+    subscriptionStatus: {
+      type: String,
+      enum: ["subscribed", "canceled"],
+      default: "canceled",
+    },
+    plan: {
+      type: String,
+      enum: ["basic", "silver", "gold", "diamond"],
+      default: "basic",
+    },
     photosPerDay: { type: Number, default: 10 }, // Default is basic plan
-
   },
   {
     timestamps: true,
